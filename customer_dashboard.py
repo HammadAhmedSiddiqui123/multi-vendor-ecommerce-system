@@ -5,7 +5,8 @@ from database import (
     get_product_details, get_product_reviews, get_customer_orders,
     get_cart_items, add_to_cart, remove_from_cart,
     validate_purchase_for_review, submit_review, validate_coupon,
-    process_checkout, get_order_items
+    process_checkout, get_order_items,
+    get_customer_addresses, add_address, update_address, delete_address
 )
 
 def show_customer_dashboard():
@@ -20,7 +21,7 @@ def show_customer_dashboard():
         return
 
     # Navigation
-    tab1, tab2, tab3 = st.tabs(["Shop", "My Cart", "Order History"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Shop", "My Cart", "Order History", "My Addresses"])
 
     with tab1:
         if 'view_product_id' in st.session_state:
@@ -185,9 +186,35 @@ def show_customer_dashboard():
                     coupon_id_to_use = st.session_state.get('coupon_id')
                 else:
                     st.subheader(f"Total: ${total:.2f}")
-                    
-                if st.button("Proceed to Checkout", type="primary"):
-                    success = process_checkout(customer_id, cart_id, final_checkout_amount, coupon_id_to_use)
+
+            # ── Shipping Address Selection ──────────────────────────────
+            st.divider()
+            st.subheader("Shipping Address")
+            
+            user_id = user_info['user_id']
+            addresses = get_customer_addresses(user_id)
+            
+            if not addresses:
+                st.warning("You have no saved addresses. Please add one in the 'My Addresses' tab before checking out.")
+                selected_address_id = None
+            else:
+                address_options = {}
+                for addr in addresses:
+                    postal = f", {addr['postal_code']}" if addr['postal_code'] else ""
+                    label = f"{addr['label']}: {addr['street']}, {addr['city']}{postal}"
+                    address_options[label] = addr['address_id']
+                
+                # Select address
+                option_keys = list(address_options.keys())
+                selected_label = st.selectbox("Select delivery address", option_keys)
+                selected_address_id = address_options[selected_label]
+            
+            # ── Checkout Button ─────────────────────────────────────────
+            if st.button("Proceed to Checkout", type="primary"):
+                if not selected_address_id:
+                    st.warning("Please add a delivery address first! Go to the 'My Addresses' tab to add one.")
+                else:
+                    success = process_checkout(customer_id, cart_id, final_checkout_amount, coupon_id_to_use, selected_address_id)
                     if success:
                         st.success("Checkout successful! Your order has been placed.")
                         # Clear session state items for coupon
@@ -211,6 +238,8 @@ def show_customer_dashboard():
                     st.write(f"**Shipment Status:** {order['shipment_status'] or 'Pending'}")
                     if order['tracking_code']:
                         st.write(f"**Tracking Code:** {order['tracking_code']}")
+                    if order.get('address_label'):
+                        st.write(f"**Shipping Address:** {order['address_label']} - {order['address_street']}, {order['address_city']}")
                     
                     st.divider()
                     st.write("#### Order Items")
@@ -222,3 +251,94 @@ def show_customer_dashboard():
                         st.table(df_items)
                     else:
                         st.info("No item details found.")
+
+    # ── Tab 4: My Addresses ─────────────────────────────────────────────
+    with tab4:
+        st.subheader("My Addresses")
+        user_id = user_info['user_id']
+        addresses = get_customer_addresses(user_id)
+        
+        # ── Add New Address Form ──
+        st.write("#### Add New Address")
+        with st.form("add_address_form", clear_on_submit=True):
+            a_col1, a_col2 = st.columns(2)
+            with a_col1:
+                new_label = st.text_input("Label")
+                new_street = st.text_input("Street Address")
+            with a_col2:
+                new_city = st.text_input("City")
+                new_postal = st.text_input("Postal Code")
+            
+            if st.form_submit_button("Save Address", type="primary"):
+                if not new_label or not new_street or not new_city:
+                    st.error("Label, Street, and City are required.")
+                else:
+                    result = add_address(user_id, new_label, new_street, new_city, new_postal)
+                    if result:
+                        st.success("Address saved successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to save address.")
+        
+        st.divider()
+
+        # ── Existing Addresses ──
+        if not addresses:
+            st.info("You have no saved addresses yet. Add one above to get started.")
+        else:
+            st.write("#### Saved Addresses")
+            for addr in addresses:
+                postal_display = f", {addr['postal_code']}" if addr['postal_code'] else ""
+                
+                with st.container(border=True):
+                    col_info, col_actions = st.columns([4, 2])
+                    
+                    with col_info:
+                        st.write(f"**{addr['label']}**")
+                        st.write(f"{addr['street']}, {addr['city']}{postal_display}")
+                    
+                    with col_actions:
+                        btn_cols = st.columns(2)
+                        
+                        # Edit button - toggles edit mode in session state
+                        edit_key = f"editing_addr_{addr['address_id']}"
+                        if btn_cols[0].button("Edit", key=f"edit_{addr['address_id']}"):
+                            st.session_state[edit_key] = not st.session_state.get(edit_key, False)
+                            st.rerun()
+                        
+                        # Delete
+                        if btn_cols[1].button("Delete", key=f"del_{addr['address_id']}"):
+                            result = delete_address(addr['address_id'], user_id)
+                            if result == "in_use":
+                                st.error("Cannot delete this address - it is linked to existing orders.")
+                            elif result:
+                                st.success("Address deleted.")
+                                st.rerun()
+                            else:
+                                st.error("Failed to delete address.")
+                    
+                    # Inline Edit Form
+                    edit_key = f"editing_addr_{addr['address_id']}"
+                    if st.session_state.get(edit_key, False):
+                        with st.form(key=f"edit_form_{addr['address_id']}"):
+                            e_col1, e_col2 = st.columns(2)
+                            with e_col1:
+                                edit_label = st.text_input("Label", value=addr['label'])
+                                edit_street = st.text_input("Street", value=addr['street'])
+                            with e_col2:
+                                edit_city = st.text_input("City", value=addr['city'])
+                                edit_postal = st.text_input("Postal Code", value=addr['postal_code'] or "")
+                            
+                            e_btn1, e_btn2 = st.columns(2)
+                            with e_btn1:
+                                if st.form_submit_button("Update Address", type="primary"):
+                                    if not edit_label or not edit_street or not edit_city:
+                                        st.error("Label, Street, and City are required.")
+                                    else:
+                                        result = update_address(addr['address_id'], user_id, edit_label, edit_street, edit_city, edit_postal)
+                                        if result:
+                                            st.success("Address updated!")
+                                            del st.session_state[edit_key]
+                                            st.rerun()
+                                        else:
+                                            st.error("Failed to update address.")

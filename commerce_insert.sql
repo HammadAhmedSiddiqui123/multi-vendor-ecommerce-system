@@ -65,13 +65,13 @@ VALUES
 (3,5,NULL,5,'Face Wash','Skin cleanser',900,90,'active');
 
 -- User Addresses
-INSERT INTO useraddress (user_id, label, street, city, postal_code, is_default) VALUES
-(5,'Home','Street 1','Karachi','75000',1),
-(6,'Home','Street 2','Lahore','54000',1),
-(7,'Home','Street 3','Karachi','75010',1),
-(8,'Home','Street 4','Islamabad','44000',1),
-(9,'Home','Street 5','Karachi','75020',1),
-(10,'Home','Street 6','Lahore','54010',1);
+INSERT INTO useraddress (user_id, label, street, city, postal_code) VALUES
+(5,'Home','Street 1','Karachi','75000'),
+(6,'Home','Street 2','Lahore','54000'),
+(7,'Home','Street 3','Karachi','75010'),
+(8,'Home','Street 4','Islamabad','44000'),
+(9,'Home','Street 5','Karachi','75020'),
+(10,'Home','Street 6','Lahore','54010');
 
 INSERT INTO Coupon 
 (code, discount_type, discount_value, min_order_amount, max_uses, start_date, end_date, is_active)
