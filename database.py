@@ -439,7 +439,7 @@ def get_seller_orders(seller_id):
     try:
         cursor = conn.cursor(buffered=True, dictionary=True)
         query = """
-            SELECT o.order_id, o.order_date, o.status AS order_status, 
+            SELECT oi.order_item_id, o.order_id, o.order_date, o.status AS order_status, 
                    p.product_name, oi.quantity, oi.subtotal, c.full_name AS customer_name
             FROM OrderItem oi
             JOIN Product p USING(product_id)
@@ -969,6 +969,264 @@ def update_product_stock(product_id, new_stock):
         return True
     except Exception as e:
         print(f"Update Stock Error: {e}")
+        return False
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# --- New Logistics & Warehouse Management ---
+
+def get_all_warehouses():
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        cursor.execute("SELECT * FROM Warehouse WHERE is_active = 1")
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_global_inventory():
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        query = """
+            SELECT p.product_name, w.name AS warehouse_name, i.quantity_on_hand, i.reorder_level
+            FROM inventory i
+            JOIN Product p USING(product_id)
+            JOIN Warehouse w USING(warehouse_id)
+            ORDER BY p.product_name
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# --- New Payment Method Management ---
+
+def get_payment_methods(customer_id):
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        cursor.execute("SELECT * FROM PaymentMethod WHERE customer_id = %s", (customer_id,))
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def add_payment_method(customer_id, p_type, details):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        cursor.execute("INSERT INTO PaymentMethod (customer_id, type, details) VALUES (%s, %s, %s)", 
+                      (customer_id, p_type, details))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# --- New Payment & Shipment Tracking ---
+
+def get_payment_stats():
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        query = """
+            SELECT status, COUNT(*) as count, SUM(amount) as total_amount
+            FROM Payment
+            GROUP BY status
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_all_shipments():
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        query = """
+            SELECT s.shipment_id, o.order_id, s.status, s.tracking_code, da.full_name AS agent_name
+            FROM Shipment s
+            JOIN `Order` o USING(order_id)
+            LEFT JOIN DeliveryAgent da USING(agent_id)
+            ORDER BY s.shipment_id DESC
+        """
+        cursor.execute(query)
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_low_stock_alerts(seller_id):
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        # Using the view vw_LowStock and filtering by seller_id
+        query = """
+            SELECT p.product_name, p.stock, i.reorder_level, w.name AS warehouse_name
+            FROM Product p
+            JOIN inventory i USING(product_id)
+            JOIN Warehouse w USING(warehouse_id)
+            WHERE p.seller_id = %s AND p.stock <= i.reorder_level
+        """
+        cursor.execute(query, (seller_id,))
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_top_rated_products():
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        cursor.execute("SELECT * FROM vw_TopRatedProducts")
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_seller_inventory(seller_id):
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        query = """
+            SELECT p.product_name, w.name AS warehouse_name, i.quantity_on_hand, i.reorder_level
+            FROM inventory i
+            JOIN Product p USING(product_id)
+            JOIN Warehouse w USING(warehouse_id)
+            WHERE p.seller_id = %s
+            ORDER BY p.product_name
+        """
+        cursor.execute(query, (seller_id,))
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# --- Wishlist Management ---
+
+def get_wishlist_items(customer_id):
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        query = """
+            SELECT w.wishlist_id, p.product_id, p.product_name, p.price, p.stock, c.category_name, s.shop_name AS seller_name
+            FROM Wishlist w
+            JOIN Product p USING(product_id)
+            LEFT JOIN Category c USING(category_id)
+            JOIN Seller s USING(seller_id)
+            WHERE w.customer_id = %s
+            ORDER BY w.added_at DESC
+        """
+        cursor.execute(query, (customer_id,))
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def is_in_wishlist(customer_id, product_id):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        cursor.execute("SELECT wishlist_id FROM Wishlist WHERE customer_id = %s AND product_id = %s", (customer_id, product_id))
+        return cursor.fetchone() is not None
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def toggle_wishlist(customer_id, product_id):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        cursor.execute("SELECT wishlist_id FROM Wishlist WHERE customer_id = %s AND product_id = %s", (customer_id, product_id))
+        item = cursor.fetchone()
+        
+        if item:
+            cursor.execute("DELETE FROM Wishlist WHERE wishlist_id = %s", (item[0],))
+        else:
+            cursor.execute("INSERT INTO Wishlist (customer_id, product_id) VALUES (%s, %s)", (customer_id, product_id))
+            
+        conn.commit()
+        return True
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def remove_from_wishlist_by_id(wishlist_id):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        cursor.execute("DELETE FROM Wishlist WHERE wishlist_id = %s", (wishlist_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(e)
         return False
     finally:
         if conn and conn.is_connected():

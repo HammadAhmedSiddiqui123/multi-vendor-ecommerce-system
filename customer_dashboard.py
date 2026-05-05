@@ -6,7 +6,9 @@ from database import (
     get_cart_items, add_to_cart, remove_from_cart,
     validate_purchase_for_review, submit_review, validate_coupon,
     process_checkout, get_order_items,
-    get_customer_addresses, add_address, update_address, delete_address
+    get_customer_addresses, add_address, update_address, delete_address,
+    get_payment_methods, add_payment_method,
+    get_wishlist_items, is_in_wishlist, toggle_wishlist, remove_from_wishlist_by_id
 )
 
 def show_customer_dashboard():
@@ -21,7 +23,7 @@ def show_customer_dashboard():
         return
 
     # Navigation
-    tab1, tab2, tab3, tab4 = st.tabs(["Shop", "My Cart", "Order History", "My Addresses"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Shop", "My Cart", "Order History", "My Addresses", "Payment Methods", "My Wishlist"])
 
     with tab1:
         if 'view_product_id' in st.session_state:
@@ -61,6 +63,12 @@ def show_customer_dashboard():
                                     st.error("Failed to add to cart.")
                             else:
                                 st.error("Out of stock!")
+                    
+                    in_wishlist = is_in_wishlist(customer_id, details['product_id'])
+                    wishlist_btn_text = "❤️ Remove from Wishlist" if in_wishlist else "🤍 Add to Wishlist"
+                    if st.button(wishlist_btn_text, key=f"wish_detail_{details['product_id']}"):
+                        if toggle_wishlist(customer_id, details['product_id']):
+                            st.rerun()
                 
                 st.divider()
                 # Show reviews
@@ -129,10 +137,18 @@ def show_customer_dashboard():
                                     else:
                                         st.error("Out of stock!")
                                         
-                            # View Details
-                            if st.button("View Details", key=f"details_{product['product_id']}"):
-                                st.session_state['view_product_id'] = product['product_id']
-                                st.rerun()
+                            # View Details & Wishlist
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if st.button("Details", key=f"details_{product['product_id']}"):
+                                    st.session_state['view_product_id'] = product['product_id']
+                                    st.rerun()
+                            with c2:
+                                in_wish = is_in_wishlist(customer_id, product['product_id'])
+                                wish_text = "❤️" if in_wish else "🤍"
+                                if st.button(wish_text, key=f"wish_grid_{product['product_id']}"):
+                                    if toggle_wishlist(customer_id, product['product_id']):
+                                        st.rerun()
 
     with tab2:
         st.subheader("My Shopping Cart")
@@ -342,3 +358,69 @@ def show_customer_dashboard():
                                             st.rerun()
                                         else:
                                             st.error("Failed to update address.")
+
+    # ── Tab 5: Payment Methods ─────────────────────────────────────────
+    with tab5:
+        st.subheader("My Payment Methods")
+        
+        # ── Add New Payment Method ──
+        with st.expander("Add New Payment Method"):
+            with st.form("add_payment_form", clear_on_submit=True):
+                p_type = st.selectbox("Method Type", ["card", "wallet", "bank_transfer", "cash_on_delivery"])
+                p_details = st.text_input("Details (e.g. Card ending in 1234)")
+                
+                if st.form_submit_button("Save Payment Method"):
+                    if not p_details:
+                        st.error("Please provide payment details.")
+                    else:
+                        if add_payment_method(customer_id, p_type, p_details):
+                            st.success("Payment method added!")
+                            st.rerun()
+                        else:
+                            st.error("Failed to add payment method.")
+        
+        st.divider()
+        
+        # ── Existing Payment Methods ──
+        methods = get_payment_methods(customer_id)
+        if not methods:
+            st.info("No saved payment methods.")
+        else:
+            for m in methods:
+                with st.container(border=True):
+                    col1, col2 = st.columns([4, 1])
+                    col1.write(f"**{m['type'].replace('_', ' ').capitalize()}**")
+                    col1.write(f"{m['details']}")
+                    if m['is_default']:
+                        col2.write("⭐ Default")
+
+    # ── Tab 6: My Wishlist ─────────────────────────────────────────────
+    with tab6:
+        st.subheader("My Wishlist")
+        wishlist = get_wishlist_items(customer_id)
+        
+        if not wishlist:
+            st.info("Your wishlist is currently empty. Start adding products from the Shop!")
+        else:
+            w_cols = st.columns(3)
+            for idx, item in enumerate(wishlist):
+                with w_cols[idx % 3]:
+                    with st.container(border=True):
+                        st.write(f"**{item['product_name']}**")
+                        st.write(f"${item['price']}")
+                        st.write(f"Seller: {item['seller_name']}")
+                        
+                        btn_c1, btn_c2 = st.columns(2)
+                        with btn_c1:
+                            if st.button("Add to Cart", key=f"w_cart_{item['wishlist_id']}"):
+                                if item['stock'] > 0:
+                                    if add_to_cart(customer_id, item['product_id'], 1):
+                                        st.success("Added!")
+                                    else:
+                                        st.error("Error")
+                                else:
+                                    st.error("Out of stock")
+                        with btn_c2:
+                            if st.button("Remove", key=f"w_rm_{item['wishlist_id']}"):
+                                remove_from_wishlist_by_id(item['wishlist_id'])
+                                st.rerun()

@@ -4,7 +4,8 @@ import plotly.express as px
 from database import (
     get_or_create_seller, get_seller_stats, get_seller_products,
     add_product, delete_product, get_seller_orders, get_categories,
-    update_order_status, update_product_stock
+    update_order_status, update_product_stock, get_low_stock_alerts,
+    get_seller_inventory
 )
 
 def show_seller_dashboard():
@@ -30,13 +31,12 @@ def show_seller_dashboard():
             
         st.divider()
         st.subheader("Low Stock Alerts")
-        products = get_seller_products(seller_id)
-        low_stock = [p for p in products if p['stock'] < 10]
+        low_stock = get_low_stock_alerts(seller_id)
         if not low_stock:
             st.success("All products are well stocked!")
         else:
             for p in low_stock:
-                st.warning(f"**{p['product_name']}** has only {p['stock']} units left!")
+                st.warning(f"**{p['product_name']}** has only {p['stock']} units left in **{p.get('warehouse_name', 'Unknown')}**! (Reorder Level: {p['reorder_level']})")
 
     with tab2:
         st.subheader("Manage Products")
@@ -96,6 +96,15 @@ def show_seller_dashboard():
                 xaxis=dict(gridcolor='#1a4d35'), yaxis=dict(gridcolor='#1a4d35')
             )
             st.plotly_chart(fig_stock, use_container_width=True)
+            
+            st.write("#### Warehouse Inventory Distribution")
+            inventory = get_seller_inventory(seller_id)
+            if inventory:
+                df_inv = pd.DataFrame(inventory)
+                st.dataframe(df_inv, use_container_width=True)
+            else:
+                st.info("No warehouse inventory data available for your products.")
+                
             st.divider()
                 
             for p in products:
@@ -182,12 +191,12 @@ def show_seller_dashboard():
                                 "Update Status", 
                                 status_options, 
                                 index=status_options.index(current_status) if current_status in status_options else 0,
-                                key=f"status_{o['order_id']}_{o['product_name']}"
+                                key=f"status_{o['order_item_id']}"
                             )
                         with col2:
                             st.write("")
                             st.write("")
-                            if st.button("Update", key=f"btn_status_{o['order_id']}_{o['product_name']}"):
+                            if st.button("Update", key=f"btn_status_{o['order_item_id']}"):
                                 if new_status != current_status:
                                     success = update_order_status(o['order_id'], new_status)
                                     if success:

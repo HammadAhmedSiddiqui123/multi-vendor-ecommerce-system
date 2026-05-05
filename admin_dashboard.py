@@ -6,13 +6,15 @@ from datetime import datetime, timedelta
 from database import (
     get_all_users, delete_user, get_all_orders,
     get_monthly_revenue, get_daily_revenue, get_all_coupons, add_coupon,
-    get_all_sellers, get_admin_detailed_orders, get_revenue_by_category, get_top_sellers
+    get_all_sellers, get_admin_detailed_orders, get_revenue_by_category, get_top_sellers,
+    get_all_warehouses, get_global_inventory, get_payment_stats, get_all_shipments,
+    get_top_rated_products
 )
 
 def show_admin_dashboard():
     st.title("Admin Portal")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Users", "All Orders", "Revenue", "Coupons"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Users", "All Orders", "Revenue", "Coupons", "Logistics & Inventory"])
 
     with tab1:
         st.subheader("User Management")
@@ -199,6 +201,35 @@ def show_admin_dashboard():
                     )
                     st.plotly_chart(fig4, use_container_width=True)
 
+            # --- Payment Status Analytics ---
+            st.write("### Payment Status Breakdown")
+            pay_stats = get_payment_stats()
+            if pay_stats:
+                df_pay = pd.DataFrame(pay_stats)
+                fig5 = px.pie(df_pay, names='status', values='count', title='Payment Status Distribution',
+                              color_discrete_sequence=['#00d97e', '#f5a623', '#e74c3c', '#3498db'])
+                fig5.update_layout(
+                    paper_bgcolor='#0d2818', plot_bgcolor='#0a1a14',
+                    font=dict(family='Josefin Sans', color='#e0e0e0'),
+                    title_font=dict(family='Exo 2', color='#00d97e')
+                )
+                st.plotly_chart(fig5, use_container_width=True)
+
+            # --- Top Rated Products ---
+            st.write("### Top Rated Products")
+            top_rated = get_top_rated_products()
+            if top_rated:
+                df_top = pd.DataFrame(top_rated)
+                fig6 = px.bar(df_top, x='product_name', y='avg_rating', hover_data=['review_count'],
+                              title='Top Rated Products (Avg >= 4.0)', color='avg_rating',
+                              color_continuous_scale='Greens', labels={'product_name': 'Product', 'avg_rating': 'Rating'})
+                fig6.update_layout(
+                    paper_bgcolor='#0d2818', plot_bgcolor='#0a1a14',
+                    font=dict(family='Josefin Sans', color='#e0e0e0'),
+                    title_font=dict(family='Exo 2', color='#00d97e')
+                )
+                st.plotly_chart(fig6, use_container_width=True)
+
     with tab4:
         st.subheader("Coupon Management")
         
@@ -235,3 +266,47 @@ def show_admin_dashboard():
         else:
             df_coupons = pd.DataFrame(coupons)
             st.dataframe(df_coupons, use_container_width=True)
+
+    with tab5:
+        st.subheader("Logistics & Warehouse Management")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("### Active Warehouses")
+            warehouses = get_all_warehouses()
+            if warehouses:
+                st.dataframe(pd.DataFrame(warehouses), use_container_width=True)
+            else:
+                st.info("No active warehouses found.")
+        
+        with col2:
+            st.write("### Shipment Tracking")
+            shipments = get_all_shipments()
+            if shipments:
+                st.dataframe(pd.DataFrame(shipments), use_container_width=True)
+            else:
+                st.info("No shipment records found.")
+        
+        st.divider()
+        st.write("### Global Inventory Overview")
+        inventory = get_global_inventory()
+        if inventory:
+            df_inv = pd.DataFrame(inventory)
+            # Highlight low stock
+            def highlight_low_stock(row):
+                return ['background-color: rgba(231, 76, 60, 0.3)' if row['quantity_on_hand'] <= row['reorder_level'] else '' for _ in row]
+            
+            st.dataframe(df_inv.style.apply(highlight_low_stock, axis=1), use_container_width=True)
+            
+            # Inventory chart
+            fig_inv = px.bar(df_inv, x='product_name', y='quantity_on_hand', color='warehouse_name',
+                             title='Stock Levels by Warehouse', barmode='group',
+                             color_discrete_sequence=['#00d97e', '#f5a623', '#3498db'])
+            fig_inv.update_layout(
+                paper_bgcolor='#0d2818', plot_bgcolor='#0a1a14',
+                font=dict(family='Josefin Sans', color='#e0e0e0'),
+                title_font=dict(family='Exo 2', color='#00d97e')
+            )
+            st.plotly_chart(fig_inv, use_container_width=True)
+        else:
+            st.info("No inventory data found.")
