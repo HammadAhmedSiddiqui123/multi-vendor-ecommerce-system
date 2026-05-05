@@ -65,13 +65,13 @@ VALUES
 (3,5,NULL,5,'Face Wash','Skin cleanser',900,90,'active');
 
 -- User Addresses
-INSERT INTO useraddress (user_id, label, street, city, postal_code) VALUES
-(5,'Home','Street 1','Karachi','75000'),
-(6,'Home','Street 2','Lahore','54000'),
-(7,'Home','Street 3','Karachi','75010'),
-(8,'Home','Street 4','Islamabad','44000'),
-(9,'Home','Street 5','Karachi','75020'),
-(10,'Home','Street 6','Lahore','54010');
+INSERT INTO useraddress (user_id, label, street, city, postal_code, is_default) VALUES
+(5,'Home','Street 1','Karachi','75000',1),
+(6,'Home','Street 2','Lahore','54000',1),
+(7,'Home','Street 3','Karachi','75010',1),
+(8,'Home','Street 4','Islamabad','44000',1),
+(9,'Home','Street 5','Karachi','75020',1),
+(10,'Home','Street 6','Lahore','54010',1);
 
 INSERT INTO Coupon 
 (code, discount_type, discount_value, min_order_amount, max_uses, start_date, end_date, is_active)
@@ -145,6 +145,62 @@ INSERT INTO OrderItem (order_id, product_id, quantity, unit_price, subtotal) VAL
 (17, 6, 1, 6000, 6000),
 (18, 4, 1, 2000, 2000);
 
+INSERT INTO Warehouse (name, address, city, phone, is_active) VALUES
+('Main Warehouse', 'Industrial Area', 'Karachi', '0211234567', 1),
+('Lahore Warehouse', 'Model Town', 'Lahore', '0421234567', 1),
+('Islamabad Warehouse', 'Blue Area', 'Islamabad', '0511234567', 1);
+
+INSERT INTO inventory (product_id, warehouse_id, quantity_on_hand, reorder_level, updated_at) VALUES
+(1,1,30,10,NOW()),
+(2,1,50,10,NOW()),
+(3,2,40,10,NOW()),
+(4,2,60,10,NOW()),
+(5,3,25,10,NOW()),
+(6,3,70,10,NOW()),
+(7,1,100,20,NOW()),
+(8,2,80,20,NOW()),
+(9,1,20,10,NOW()),
+(10,3,90,15,NOW());
+
+INSERT INTO DeliveryAgent (full_name, phone, vehicle_type, is_available, rating) VALUES
+('Ahmed Raza', '03001112222', 'bike', 1, 4.5),
+('Bilal Hussain', '03112223333', 'car', 1, 4.2),
+('Usman Shah', '03223334444', 'bike', 1, 4.7),
+('Ali Zafar', '03334445555', 'bicycle', 1, 4.0);
+
+INSERT INTO Shipment (order_id, agent_id, status, tracking_code, shipped_at, delivered_at) VALUES
+(1,1,'delivered','TRK1001','2025-01-06','2025-01-08'),
+(2,2,'in_transit','TRK1002','2025-01-11',NULL),
+(3,3,'delivered','TRK1003','2025-02-03','2025-02-05'),
+(4,1,'processing','TRK1004',NULL,NULL),
+(5,2,'dispatched','TRK1005','2025-03-02',NULL),
+(6,3,'delivered','TRK1006','2025-03-11','2025-03-13');
+
+INSERT INTO PaymentMethod (customer_id, type, details, is_default) VALUES
+(1,'card','Visa ****1234',1),
+(2,'cash_on_delivery','COD',1),
+(3,'wallet','Easypaisa',1),
+(4,'card','Mastercard ****5678',1),
+(5,'bank_transfer','HBL Bank',1),
+(6,'wallet','JazzCash',1);
+
+INSERT INTO Payment (order_id, method_id, amount, status, transaction_ref, payment_date) VALUES
+(7,1,5000,'completed','TXN1007','2025-01-05'),
+(8,2,11800,'completed','TXN1008','2025-01-10'),
+(9,3,3000,'completed','TXN1009','2025-02-02'),
+(10,4,6500,'completed','TXN1010','2025-02-15'),
+(11,5,1500,'completed','TXN1011','2025-03-01'),
+(12,6,9000,'completed','TXN1012','2025-03-10');
+
+INSERT INTO Wishlist (customer_id, product_id) VALUES
+(1,3),
+(1,5),
+(2,1),
+(2,4),
+(3,2),
+(4,6),
+(5,7),
+(6,8);
 -- UPDATE `Order`
 -- SET coupon_id = 1, discount_amount = 6500
 -- WHERE order_id = 1;

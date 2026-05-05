@@ -183,4 +183,77 @@ JOIN Review r ON p.product_id = r.product_id
 GROUP BY p.product_id, p.product_name, p.price
 HAVING avg_rating >= 4.0
 ORDER BY avg_rating DESC;
-
+-- Warehouse + Inventory Queries
+SELECT 
+    w.name AS warehouse,
+    p.product_name,
+    i.quantity_on_hand
+FROM inventory i
+JOIN warehouse w ON i.warehouse_id = w.warehouse_id
+JOIN product p   ON i.product_id = p.product_id;
+-- Low stock products
+SELECT 
+    p.product_name,
+    i.quantity_on_hand,
+    i.reorder_level
+FROM inventory i
+JOIN product p ON i.product_id = p.product_id
+WHERE i.quantity_on_hand <= i.reorder_level;
+-- Shipment + Delivery Agent
+SELECT 
+    o.order_id,
+    s.status,
+    s.tracking_code,
+    d.full_name AS agent
+FROM shipment s
+JOIN `Order` o ON s.order_id = o.order_id
+LEFT JOIN deliveryagent d ON s.agent_id = d.agent_id;
+-- Delivered orders only
+SELECT 
+    o.order_id,
+    s.delivered_at
+FROM shipment s
+JOIN `Order` o ON s.order_id = o.order_id
+WHERE s.status = 'delivered';
+-- Agent performance
+SELECT 
+    d.full_name,
+    COUNT(s.shipment_id) AS total_deliveries
+FROM deliveryagent d
+LEFT JOIN shipment s ON d.agent_id = s.agent_id
+GROUP BY d.agent_id;
+-- Payment + Payment Method
+SELECT 
+    o.order_id,
+    p.amount,
+    p.status,
+    pm.type
+FROM payment p
+JOIN `Order` o ON p.order_id = o.order_id
+LEFT JOIN paymentmethod pm ON p.method_id = pm.method_id;
+-- Total revenue
+SELECT 
+    SUM(amount) AS total_revenue
+FROM payment
+WHERE status = 'completed';
+-- Pending payments
+SELECT 
+    order_id,
+    amount
+FROM payment
+WHERE status = 'pending';
+-- Customer wishlist
+SELECT 
+    c.full_name,
+    p.product_name
+FROM wishlist w
+JOIN customer c ON w.customer_id = c.customer_id
+JOIN product p  ON w.product_id = p.product_id;
+-- Most wished products
+SELECT 
+    p.product_name,
+    COUNT(w.wishlist_id) AS total_wishlist
+FROM wishlist w
+JOIN product p ON w.product_id = p.product_id
+GROUP BY p.product_id
+ORDER BY total_wishlist DESC;

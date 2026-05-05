@@ -5,7 +5,6 @@ name varchar(100) not null,
 email varchar(100) not null unique,
 password varchar(255) not null,
 role enum('admin','seller','customer') not null,
-is_active TINYINT(1) DEFAULT 1,
 created_at timestamp default current_timestamp
 );
 -- 2.customer
@@ -46,6 +45,7 @@ label varchar(50) not null ,
 street varchar(255) not null ,
 city varchar(100) not null,
 postal_code varchar(20),
+is_default tinyint(1) not null default 0,
 foreign key (user_id) references users(user_id) on delete cascade
 );
 -- 6.category

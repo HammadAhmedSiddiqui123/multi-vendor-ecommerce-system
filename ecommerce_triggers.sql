@@ -60,3 +60,51 @@ BEGIN
 END $$
 
 DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_orderitem_subtotal
+BEFORE INSERT ON OrderItem
+FOR EACH ROW
+BEGIN
+    SET NEW.subtotal = NEW.quantity * NEW.unit_price;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_update_order_total
+AFTER INSERT ON OrderItem
+FOR EACH ROW
+BEGIN
+    UPDATE `Order`
+    SET subtotal = (
+        SELECT SUM(subtotal)
+        FROM OrderItem
+        WHERE order_id = NEW.order_id
+    ),
+    total_amount = (
+        SELECT SUM(subtotal)
+        FROM OrderItem
+        WHERE order_id = NEW.order_id
+    ) - discount_amount
+    WHERE order_id = NEW.order_id;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_payment_completed
+BEFORE UPDATE ON Payment
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'completed' AND OLD.status <> 'completed' THEN
+        SET NEW.payment_date = NOW();
+    END IF;
+END $$
+
+DELIMITER ;
+
+
