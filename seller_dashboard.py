@@ -5,7 +5,7 @@ from database import (
     get_or_create_seller, get_seller_stats, get_seller_products,
     add_product, delete_product, get_seller_orders, get_categories,
     update_order_status, update_product_stock, get_low_stock_alerts,
-    get_seller_inventory
+    get_seller_inventory, get_all_delivery_agents, assign_agent_to_order_shipment
 )
 
 def show_seller_dashboard():
@@ -193,13 +193,30 @@ def show_seller_dashboard():
                                 index=status_options.index(current_status) if current_status in status_options else 0,
                                 key=f"status_{o['order_item_id']}"
                             )
+                            
+                            selected_agent = None
+                            if new_status in ['shipped', 'processing']:
+                                agents = get_all_delivery_agents()
+                                agent_options = {a['agent_id']: f"{a['full_name']} ({a['vehicle_type']})" for a in agents if a['is_available']}
+                                if agent_options:
+                                    selected_agent = st.selectbox(
+                                        "Assign Delivery Agent", 
+                                        options=list(agent_options.keys()), 
+                                        format_func=lambda x: agent_options[x], 
+                                        key=f"agent_{o['order_item_id']}"
+                                    )
+                                else:
+                                    st.warning("No available delivery agents!")
+
                         with col2:
                             st.write("")
                             st.write("")
                             if st.button("Update", key=f"btn_status_{o['order_item_id']}"):
-                                if new_status != current_status:
+                                if new_status != current_status or selected_agent:
                                     success = update_order_status(o['order_id'], new_status)
                                     if success:
+                                        if selected_agent:
+                                            assign_agent_to_order_shipment(o['order_id'], selected_agent)
                                         st.success(f"Order #{o['order_id']} status updated to {new_status}!")
                                         st.rerun()
                                     else:

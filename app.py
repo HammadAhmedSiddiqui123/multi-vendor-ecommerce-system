@@ -4,6 +4,7 @@ from database import get_connection, validate_login, register_user
 from customer_dashboard import show_customer_dashboard
 from seller_dashboard import show_seller_dashboard
 from admin_dashboard import show_admin_dashboard
+from delivery_agent_dashboard import show_delivery_agent_dashboard
 
 # Configure the Streamlit page
 st.set_page_config(page_title="E-Commerce Portal", layout="wide")
@@ -290,7 +291,7 @@ def login_page():
             reg_name = st.text_input("Full Name", placeholder="Enter your name")
             reg_email = st.text_input("Email", placeholder="Enter your email")
             reg_password = st.text_input("Password", type="password", placeholder="Create a password")
-            reg_role = st.radio("Account Type", ["customer", "seller"], horizontal=True)
+            reg_role = st.radio("Account Type", ["customer", "seller", "delivery_agent"], horizontal=True)
             reg_button = st.form_submit_button("Register")
             
             if reg_button:
@@ -323,6 +324,8 @@ def dashboard():
         show_seller_dashboard()
     elif user_role == 'admin':
         show_admin_dashboard()
+    elif user_role == 'delivery_agent':
+        show_delivery_agent_dashboard()
     else:
         st.error("Unknown user role.")
 

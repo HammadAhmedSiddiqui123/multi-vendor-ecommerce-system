@@ -4,7 +4,7 @@ user_id INT auto_increment primary key ,
 name varchar(100) not null,
 email varchar(100) not null unique,
 password varchar(255) not null,
-role enum('admin','seller','customer') not null,
+role enum('admin','seller','customer','delivery_agent') not null,
 created_at timestamp default current_timestamp
 );
 -- 2.customer
@@ -222,12 +222,14 @@ CREATE TABLE Payment (
 -- 22. DELIVERYAGENT 
 CREATE TABLE DeliveryAgent (
     agent_id     INT AUTO_INCREMENT PRIMARY KEY,
+    user_id      INT,
     full_name    VARCHAR(150) NOT NULL,
     phone        VARCHAR(20) NOT NULL UNIQUE,
     vehicle_type ENUM('bike','car','bicycle') NOT NULL,
     is_available TINYINT(1) NOT NULL DEFAULT 1,
     rating       DECIMAL(3,2) DEFAULT 0.00,
-    joined_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    joined_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 -- 23. SHIPMENT 
 CREATE TABLE Shipment (

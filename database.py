@@ -858,12 +858,24 @@ def update_order_status(order_id, status):
     if not conn: return False
     try:
         cursor = conn.cursor(buffered=True)
+        # Update the main Order table
         cursor.execute("UPDATE `Order` SET status = %s WHERE order_id = %s", (status, order_id))
+        
+        # Sync with Shipment table if applicable
+        if status == 'shipped':
+            cursor.execute("INSERT INTO Shipment (order_id, status, shipped_at) VALUES (%s, 'dispatched', NOW()) ON DUPLICATE KEY UPDATE status = 'dispatched', shipped_at = NOW()", (order_id,))
+        elif status == 'delivered':
+            cursor.execute("INSERT INTO Shipment (order_id, status, delivered_at) VALUES (%s, 'delivered', NOW()) ON DUPLICATE KEY UPDATE status = 'delivered', delivered_at = NOW()", (order_id,))
+            cursor.execute("INSERT INTO Payment (order_id, amount, status) SELECT order_id, total_amount, 'completed' FROM `Order` WHERE order_id = %s ON DUPLICATE KEY UPDATE status = 'completed'", (order_id,))
+        elif status == 'processing':
+            cursor.execute("INSERT INTO Shipment (order_id, status) VALUES (%s, 'processing') ON DUPLICATE KEY UPDATE status = 'processing'", (order_id,))
+            
         conn.commit()
         return True
     except Exception as e:
         print(f"Update Order Status error: {e}")
         return False
+
     finally:
         if conn and conn.is_connected():
             cursor.close()
@@ -1223,6 +1235,134 @@ def remove_from_wishlist_by_id(wishlist_id):
     try:
         cursor = conn.cursor(buffered=True)
         cursor.execute("DELETE FROM Wishlist WHERE wishlist_id = %s", (wishlist_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# --- Delivery Agent Management ---
+
+def get_or_create_delivery_agent(user_id, full_name):
+    conn = get_connection()
+    if not conn: return None
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        cursor.execute("SELECT agent_id FROM DeliveryAgent WHERE user_id = %s", (user_id,))
+        agent = cursor.fetchone()
+        if agent:
+            return agent['agent_id']
+        
+        import time
+        dummy_phone = f"DA-{int(time.time())}-{user_id}"
+        cursor.execute(
+            "INSERT INTO DeliveryAgent (user_id, full_name, phone, vehicle_type) VALUES (%s, %s, %s, 'bike')",
+            (user_id, full_name, dummy_phone)
+        )
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error in get_or_create_delivery_agent: {e}")
+        return None
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_agent_shipments(agent_id):
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        query = """
+            SELECT s.shipment_id, s.order_id, s.status, s.tracking_code, 
+                   ua.street, ua.city, ua.postal_code, c.full_name AS customer_name, c.phone AS customer_phone
+            FROM Shipment s
+            JOIN `Order` o USING(order_id)
+            JOIN UserAddress ua USING(address_id)
+            JOIN Customer c ON o.customer_id = c.customer_id
+            WHERE s.agent_id = %s
+            ORDER BY s.shipment_id DESC
+        """
+        cursor.execute(query, (agent_id,))
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def update_shipment_status_by_agent(shipment_id, new_status):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        if new_status == 'delivered':
+            cursor.execute("UPDATE Shipment SET status = %s, delivered_at = NOW() WHERE shipment_id = %s", (new_status, shipment_id))
+            cursor.execute("UPDATE `Order` SET status = 'delivered' WHERE order_id = (SELECT order_id FROM Shipment WHERE shipment_id = %s)", (shipment_id,))
+            cursor.execute("UPDATE Payment SET status = 'completed' WHERE order_id = (SELECT order_id FROM Shipment WHERE shipment_id = %s)", (shipment_id,))
+        else:
+            cursor.execute("UPDATE Shipment SET status = %s WHERE shipment_id = %s", (new_status, shipment_id))
+            cursor.execute("UPDATE `Order` SET status = 'shipped' WHERE order_id = (SELECT order_id FROM Shipment WHERE shipment_id = %s)", (shipment_id,))
+            
+        conn.commit()
+        return True
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def get_all_delivery_agents():
+    conn = get_connection()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(buffered=True, dictionary=True)
+        cursor.execute("SELECT agent_id, full_name, is_available, vehicle_type FROM DeliveryAgent")
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+        return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def assign_agent_to_shipment(shipment_id, agent_id):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        cursor.execute("UPDATE Shipment SET agent_id = %s, status = 'dispatched', shipped_at = NOW() WHERE shipment_id = %s", (agent_id, shipment_id))
+        cursor.execute("UPDATE `Order` SET status = 'shipped' WHERE order_id = (SELECT order_id FROM Shipment WHERE shipment_id = %s)", (shipment_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def assign_agent_to_order_shipment(order_id, agent_id):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        cursor.execute("""
+            INSERT INTO Shipment (order_id, agent_id, status, shipped_at) 
+            VALUES (%s, %s, 'dispatched', NOW())
+            ON DUPLICATE KEY UPDATE agent_id = VALUES(agent_id)
+        """, (order_id, agent_id))
         conn.commit()
         return True
     except Exception as e:
