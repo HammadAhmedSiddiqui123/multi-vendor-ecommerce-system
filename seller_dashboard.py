@@ -5,7 +5,8 @@ from database import (
     get_or_create_seller, get_seller_stats, get_seller_products,
     add_product, delete_product, get_seller_orders, get_categories,
     update_order_status, update_product_stock, get_low_stock_alerts,
-    get_seller_inventory, get_all_delivery_agents, assign_agent_to_order_shipment
+    get_seller_inventory, get_all_delivery_agents, assign_agent_to_order_shipment,
+    update_warehouse_inventory
 )
 
 def show_seller_dashboard():
@@ -101,7 +102,23 @@ def show_seller_dashboard():
             inventory = get_seller_inventory(seller_id)
             if inventory:
                 df_inv = pd.DataFrame(inventory)
-                st.dataframe(df_inv, use_container_width=True)
+                display_df = df_inv.drop(columns=['inventory_id']) if 'inventory_id' in df_inv.columns else df_inv
+                st.dataframe(display_df, use_container_width=True)
+                
+                with st.expander("Manually Update Warehouse Stock"):
+                    for item in inventory:
+                        c1, c2, c3 = st.columns([3, 2, 2])
+                        c1.write(f"**{item['product_name']}** ({item['warehouse_name']})")
+                        with c2:
+                            new_qty = st.number_input("Quantity", value=int(item['quantity_on_hand']), min_value=0, key=f"seller_inv_qty_{item['inventory_id']}", label_visibility="collapsed")
+                        with c3:
+                            if st.button("Update Stock", key=f"seller_inv_btn_{item['inventory_id']}"):
+                                if new_qty != int(item['quantity_on_hand']):
+                                    if update_warehouse_inventory(item['inventory_id'], new_qty):
+                                        st.success(f"Updated {item['product_name']} stock to {new_qty}!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to update.")
             else:
                 st.info("No warehouse inventory data available for your products.")
                 

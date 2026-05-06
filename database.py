@@ -99,7 +99,7 @@ def get_all_products(search_query="", category="All"):
             FROM Product p
             LEFT JOIN Category c USING (category_id)
             LEFT JOIN Seller s USING (seller_id)
-            WHERE p.status = 'active'
+            WHERE p.status = 'active' AND p.stock > 1
         """
         params = []
         if search_query:
@@ -396,6 +396,20 @@ def add_product(seller_id, name, description, price, stock, category_name):
             VALUES (%s, %s, %s, %s, %s, %s, 'active')
         """
         cursor.execute(query, (seller_id, category_id, name, description, price, stock))
+        product_id = cursor.lastrowid
+        
+        # Option 2 implementation: Automatically assign the new product to a warehouse
+        # so that it immediately shows up in stock alerts and inventory lists.
+        cursor.execute("SELECT warehouse_id FROM Warehouse LIMIT 1")
+        w_row = cursor.fetchone()
+        if w_row:
+            w_id = w_row['warehouse_id']
+            inv_query = """
+                INSERT INTO inventory (product_id, warehouse_id, quantity_on_hand, reorder_level, updated_at)
+                VALUES (%s, %s, %s, 10, NOW())
+            """
+            cursor.execute(inv_query, (product_id, w_id, stock))
+            
         conn.commit()
         return True
     except Exception as e:
@@ -770,7 +784,7 @@ def delete_address(address_id, user_id):
             cursor.close()
             conn.close()
 
-def process_checkout(customer_id, cart_id, total_amount, coupon_id=None, address_id=None):
+def process_checkout(customer_id, cart_id, total_amount, coupon_id=None, address_id=None, payment_method_id=None):
     conn = get_connection()
     if not conn: return False
     try:
@@ -841,6 +855,13 @@ def process_checkout(customer_id, cart_id, total_amount, coupon_id=None, address
         # 6. Update Coupon usage
         if coupon_id:
             cursor.execute("UPDATE Coupon SET used_count = used_count + 1 WHERE coupon_id = %s", (coupon_id,))
+            
+        # 7. Create Initial Payment Record
+        if payment_method_id:
+            cursor.execute("""
+                INSERT INTO Payment (order_id, method_id, amount, status)
+                VALUES (%s, %s, %s, 'pending')
+            """, (order_id, payment_method_id, total_amount))
             
         conn.commit()
         return True
@@ -1010,7 +1031,7 @@ def get_global_inventory():
     try:
         cursor = conn.cursor(buffered=True, dictionary=True)
         query = """
-            SELECT p.product_name, w.name AS warehouse_name, i.quantity_on_hand, i.reorder_level
+            SELECT i.inventory_id, p.product_name, w.name AS warehouse_name, i.quantity_on_hand, i.reorder_level
             FROM inventory i
             JOIN Product p USING(product_id)
             JOIN Warehouse w USING(warehouse_id)
@@ -1021,6 +1042,42 @@ def get_global_inventory():
     except Exception as e:
         print(e)
         return []
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+def update_warehouse_inventory(inventory_id, new_quantity):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        # 1. Update the inventory table
+        query = """
+            UPDATE inventory 
+            SET quantity_on_hand = %s, updated_at = NOW() 
+            WHERE inventory_id = %s
+        """
+        cursor.execute(query, (new_quantity, inventory_id))
+        
+        # 2. Get the product_id for this inventory record
+        cursor.execute("SELECT product_id FROM inventory WHERE inventory_id = %s", (inventory_id,))
+        p_row = cursor.fetchone()
+        if p_row:
+            product_id = p_row[0]
+            # 3. Recalculate total global stock for this product across all warehouses
+            cursor.execute("SELECT SUM(quantity_on_hand) FROM inventory WHERE product_id = %s", (product_id,))
+            total_stock_row = cursor.fetchone()
+            if total_stock_row and total_stock_row[0] is not None:
+                total_stock = int(total_stock_row[0])
+                # 4. Sync it with the Product table so the front-end customer site matches!
+                cursor.execute("UPDATE Product SET stock = %s WHERE product_id = %s", (total_stock, product_id))
+                
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Update Inventory Error: {e}")
+        return False
     finally:
         if conn and conn.is_connected():
             cursor.close()
@@ -1059,6 +1116,28 @@ def add_payment_method(customer_id, p_type, details):
         if conn and conn.is_connected():
             cursor.close()
             conn.close()
+
+def delete_payment_method(method_id, customer_id):
+    conn = get_connection()
+    if not conn: return False
+    try:
+        cursor = conn.cursor(buffered=True)
+        # Check if it's used in Payment table
+        cursor.execute("SELECT payment_id FROM Payment WHERE method_id = %s LIMIT 1", (method_id,))
+        if cursor.fetchone():
+            return "in_use"
+        
+        cursor.execute("DELETE FROM PaymentMethod WHERE method_id = %s AND customer_id = %s", (method_id, customer_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
 
 # --- New Payment & Shipment Tracking ---
 
@@ -1148,7 +1227,7 @@ def get_seller_inventory(seller_id):
     try:
         cursor = conn.cursor(buffered=True, dictionary=True)
         query = """
-            SELECT p.product_name, w.name AS warehouse_name, i.quantity_on_hand, i.reorder_level
+            SELECT i.inventory_id, p.product_name, w.name AS warehouse_name, i.quantity_on_hand, i.reorder_level
             FROM inventory i
             JOIN Product p USING(product_id)
             JOIN Warehouse w USING(warehouse_id)

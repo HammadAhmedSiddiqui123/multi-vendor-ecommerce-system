@@ -294,10 +294,12 @@ def show_admin_dashboard():
             df_inv = pd.DataFrame(inventory)
             # Highlight low stock
             def highlight_low_stock(row):
-                return ['background-color: rgba(231, 76, 60, 0.3)' if row['quantity_on_hand'] <= row['reorder_level'] else '' for _ in row]
+                return ['background-color: rgba(231, 76, 60, 0.3)' if float(row['quantity_on_hand']) <= float(row['reorder_level']) else '' for _ in row]
             
-            st.dataframe(df_inv.style.apply(highlight_low_stock, axis=1), use_container_width=True)
+            display_df = df_inv.drop(columns=['inventory_id']) if 'inventory_id' in df_inv.columns else df_inv
+            st.dataframe(display_df.style.apply(highlight_low_stock, axis=1), use_container_width=True)
             
+            st.write("---")
             # Inventory chart
             fig_inv = px.bar(df_inv, x='product_name', y='quantity_on_hand', color='warehouse_name',
                              title='Stock Levels by Warehouse', barmode='group',

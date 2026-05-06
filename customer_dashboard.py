@@ -7,7 +7,7 @@ from database import (
     validate_purchase_for_review, submit_review, validate_coupon,
     process_checkout, get_order_items,
     get_customer_addresses, add_address, update_address, delete_address,
-    get_payment_methods, add_payment_method,
+    get_payment_methods, add_payment_method, delete_payment_method,
     get_wishlist_items, is_in_wishlist, toggle_wishlist, remove_from_wishlist_by_id
 )
 
@@ -225,12 +225,30 @@ def show_customer_dashboard():
                 selected_label = st.selectbox("Select delivery address", option_keys)
                 selected_address_id = address_options[selected_label]
             
+            # ── Payment Method Selection ────────────────────────────────
+            st.divider()
+            st.subheader("Payment Method")
+            methods = get_payment_methods(customer_id)
+            if not methods:
+                st.warning("You have no saved payment methods. Please add one in the 'Payment Methods' tab before checking out.")
+                selected_payment_id = None
+            else:
+                method_options = {}
+                for m in methods:
+                    label = f"{m['type'].replace('_', ' ').title()} - {m['details']}"
+                    method_options[label] = m['method_id']
+                
+                selected_method_label = st.selectbox("Select payment method", list(method_options.keys()))
+                selected_payment_id = method_options[selected_method_label]
+
             # ── Checkout Button ─────────────────────────────────────────
             if st.button("Proceed to Checkout", type="primary"):
                 if not selected_address_id:
                     st.warning("Please add a delivery address first! Go to the 'My Addresses' tab to add one.")
+                elif not selected_payment_id:
+                    st.warning("Please add a payment method first! Go to the 'Payment Methods' tab to add one.")
                 else:
-                    success = process_checkout(customer_id, cart_id, final_checkout_amount, coupon_id_to_use, selected_address_id)
+                    success = process_checkout(customer_id, cart_id, final_checkout_amount, coupon_id_to_use, selected_address_id, selected_payment_id)
                     if success:
                         st.success("Checkout successful! Your order has been placed.")
                         # Clear session state items for coupon
@@ -367,13 +385,14 @@ def show_customer_dashboard():
         with st.expander("Add New Payment Method"):
             with st.form("add_payment_form", clear_on_submit=True):
                 p_type = st.selectbox("Method Type", ["card", "wallet", "bank_transfer", "cash_on_delivery"])
-                p_details = st.text_input("Details (e.g. Card ending in 1234)")
+                p_details = st.text_input("Details (e.g. Card ending in 1234, leave blank for Cash on Delivery)")
                 
                 if st.form_submit_button("Save Payment Method"):
-                    if not p_details:
-                        st.error("Please provide payment details.")
+                    if not p_details and p_type != 'cash_on_delivery':
+                        st.error("Please provide payment details for this method type.")
                     else:
-                        if add_payment_method(customer_id, p_type, p_details):
+                        details_to_save = p_details if p_details else "Cash on Delivery"
+                        if add_payment_method(customer_id, p_type, details_to_save):
                             st.success("Payment method added!")
                             st.rerun()
                         else:
@@ -391,8 +410,15 @@ def show_customer_dashboard():
                     col1, col2 = st.columns([4, 1])
                     col1.write(f"**{m['type'].replace('_', ' ').capitalize()}**")
                     col1.write(f"{m['details']}")
-                    if m['is_default']:
-                        col2.write("⭐ Default")
+                    if col2.button("Delete", key=f"del_pay_{m['method_id']}"):
+                        result = delete_payment_method(m['method_id'], customer_id)
+                        if result == "in_use":
+                            st.error("Cannot delete this payment method because it is linked to an existing order.")
+                        elif result:
+                            st.success("Payment method deleted!")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete payment method.")
 
     # ── Tab 6: My Wishlist ─────────────────────────────────────────────
     with tab6:
