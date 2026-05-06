@@ -8,7 +8,7 @@ from database import (
     get_monthly_revenue, get_daily_revenue, get_all_coupons, add_coupon,
     get_all_sellers, get_admin_detailed_orders, get_revenue_by_category, get_top_sellers,
     get_all_warehouses, get_global_inventory, get_payment_stats, get_all_shipments,
-    get_top_rated_products, get_all_delivery_agents, assign_agent_to_shipment
+    get_top_rated_products
 )
 
 def show_admin_dashboard():
@@ -284,37 +284,6 @@ def show_admin_dashboard():
             shipments = get_all_shipments()
             if shipments:
                 st.dataframe(pd.DataFrame(shipments), use_container_width=True)
-                
-                # Assign Agent
-                st.write("#### Assign Delivery Agent")
-                agents = get_all_delivery_agents()
-                processing_shipments = [s for s in shipments if s['status'] == 'processing']
-                
-                if not processing_shipments:
-                    st.info("No shipments currently need agent assignment.")
-                elif not agents:
-                    st.warning("No delivery agents available. Please register an agent first.")
-                else:
-                    with st.form("assign_agent_form"):
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            shipment_options = {s['shipment_id']: f"Shipment #{s['shipment_id']} (Order #{s['order_id']})" for s in processing_shipments}
-                            selected_shipment = st.selectbox("Select Shipment", options=list(shipment_options.keys()), format_func=lambda x: shipment_options[x])
-                        with c2:
-                            agent_options = {a['agent_id']: f"{a['full_name']} ({a['vehicle_type']})" for a in agents if a['is_available']}
-                            if not agent_options:
-                                st.warning("No available agents right now.")
-                                selected_agent = None
-                            else:
-                                selected_agent = st.selectbox("Select Agent", options=list(agent_options.keys()), format_func=lambda x: agent_options[x])
-                        
-                        if st.form_submit_button("Assign Agent"):
-                            if selected_agent:
-                                if assign_agent_to_shipment(selected_shipment, selected_agent):
-                                    st.success("Agent assigned successfully!")
-                                    st.rerun()
-                                else:
-                                    st.error("Failed to assign agent.")
             else:
                 st.info("No shipment records found.")
         
